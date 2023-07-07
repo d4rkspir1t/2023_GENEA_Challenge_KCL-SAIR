@@ -47,6 +47,7 @@ else:
 ### Load Tacotron2 Model
 model = Tacotron2(hparams)
 if args.checkpoint_path is not None:
+	print('Reading from checkpoint file: ', args.checkpoint_path)
 	model.load_state_dict(torch.load(args.checkpoint_path, map_location="cpu")['state_dict'])
 model.cuda().eval()
 

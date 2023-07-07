@@ -11,6 +11,8 @@ from common.hparams_dyadic import create_hparams
 from torch.utils.data import DataLoader
 from common.loss_function import Tacotron2Loss
 
+torch.cuda.empty_cache()
+torch.cuda.set_per_process_memory_fraction(1.0)
 def load_h5(h5_data, motion_dim, audio_stats):
     """Return the data for each modality in the given h5 file as separate lists."""
     h5_data_len = len(h5_data.keys())
@@ -79,6 +81,7 @@ class SpeechGestureDataset_Dyadic(torch.utils.data.Dataset):
             self.speaker_id += speaker_id_main
             self.text += text_main
             self.motion += motion_main
+            # print('MAIN TEXT', text_main)
             
             mel_iloc, mfcc_iloc, prosody_iloc, speaker_id_iloc, text_iloc, motion_iloc = load_h5(self.h5_iloc, motion_dim, audio_stats_dict)
             self.mel_interlocutor += mel_iloc
@@ -87,9 +90,15 @@ class SpeechGestureDataset_Dyadic(torch.utils.data.Dataset):
             self.speaker_id_interlocutor += speaker_id_iloc
             self.text_interlocutor += text_iloc
             self.motion_interlocutor += motion_iloc
-            
+
+            # print(speaker_id_main)
+            # for id in speaker_id_main:
+            #     print(id)
+            # print(speaker_id_iloc)
+
             self.h5_main.close()
             self.h5_iloc.close()
+            # exit()
             
         if val_h5file_main is not None:
             self.h5_main = h5py.File(val_h5file_main, "r")
@@ -128,45 +137,63 @@ class SpeechGestureDataset_Dyadic(torch.utils.data.Dataset):
         return len(self.motion)
 
     def __getitem__(self, idx):
-        # total_frame_len = self.mel[idx].shape[0]
-        total_frame_len = self.cropped_lengths[idx]
-        start_frame = np.random.randint(0, total_frame_len - self.segment_length)
-        end_frame = start_frame + self.segment_length
-        mel = self.mel[idx][start_frame:end_frame]
-        mfcc = self.mfcc[idx][start_frame:end_frame]
-        prosody = self.prosody[idx][start_frame:end_frame]
-        audio = np.concatenate((mel, mfcc, prosody), axis=-1)
+        while True:
+            # total_frame_len = self.mel[idx].shape[0]
+            total_frame_len = self.cropped_lengths[idx]
+            start_frame = np.random.randint(0, total_frame_len - self.segment_length)
+            end_frame = start_frame + self.segment_length
+            mel = self.mel[idx][start_frame:end_frame]
+            mfcc = self.mfcc[idx][start_frame:end_frame]
+            prosody = self.prosody[idx][start_frame:end_frame]
+            audio = np.concatenate((mel, mfcc, prosody), axis=-1)
 
-        speaker = np.zeros([self.segment_length, 17])
-        speaker[:, self.speaker_id[idx]] = 1
-        text = self.text[idx][start_frame:end_frame]
-        text = np.concatenate((text, speaker), axis=-1)
-        textaudio = np.concatenate((audio, text), axis=-1)
-        textaudio = torch.FloatTensor(textaudio).transpose(0, 1)
+            speaker = np.zeros([self.segment_length, 17])
+            speaker[:, self.speaker_id[idx]] = 1
+            text = self.text[idx][start_frame:end_frame]
+            text = np.concatenate((text, speaker), axis=-1)
+            textaudio = np.concatenate((audio, text), axis=-1)
+            textaudio = torch.FloatTensor(textaudio).transpose(0, 1)
 
-        gesture = self.motion[idx][start_frame:end_frame]
-        gesture = torch.FloatTensor(gesture).transpose(0, 1)
-        gate = torch.zeros([self.segment_length, ])
-        gate[-1] = 1
-        length = torch.LongTensor([self.segment_length])
+            gesture = self.motion[idx][start_frame:end_frame]
+            gesture = torch.FloatTensor(gesture).transpose(0, 1)
+            gate = torch.zeros([self.segment_length, ])
+            gate[-1] = 1
+            length = torch.LongTensor([self.segment_length])
 
-        ## interlocutor
-        mel_interlocutor = self.mel_interlocutor[idx][start_frame:end_frame]
-        mfcc_interlocutor = self.mfcc_interlocutor[idx][start_frame:end_frame]
-        prosody_interlocutor = self.prosody_interlocutor[idx][start_frame:end_frame]
-        audio_interlocutor = np.concatenate((mel_interlocutor, mfcc_interlocutor, prosody_interlocutor), axis=-1)
+            ## interlocutor
+            mel_interlocutor = self.mel_interlocutor[idx][start_frame:end_frame]
+            mfcc_interlocutor = self.mfcc_interlocutor[idx][start_frame:end_frame]
+            prosody_interlocutor = self.prosody_interlocutor[idx][start_frame:end_frame]
+            audio_interlocutor = np.concatenate((mel_interlocutor, mfcc_interlocutor, prosody_interlocutor), axis=-1)
 
-        speaker_interlocutor = np.zeros([self.segment_length, 17])
-        speaker_interlocutor[:, self.speaker_id_interlocutor[idx]] = 1
-        text_interlocutor = self.text_interlocutor[idx][start_frame:end_frame]
-        text_interlocutor = np.concatenate((text_interlocutor, speaker_interlocutor), axis=-1)
-        textaudio_interlocutor = np.concatenate((audio_interlocutor, text_interlocutor), axis=-1)
-        textaudio_interlocutor = torch.FloatTensor(textaudio_interlocutor).transpose(0, 1)
+            speaker_interlocutor = np.zeros([self.segment_length, 17])
+            speaker_interlocutor[:, self.speaker_id_interlocutor[idx]] = 1
+            text_interlocutor = self.text_interlocutor[idx][start_frame:end_frame]
+            text_interlocutor = np.concatenate((text_interlocutor, speaker_interlocutor), axis=-1)
+            textaudio_interlocutor = np.concatenate((audio_interlocutor, text_interlocutor), axis=-1)
+            textaudio_interlocutor = torch.FloatTensor(textaudio_interlocutor).transpose(0, 1)
 
-        gesture_interlocutor = self.motion_interlocutor[idx][start_frame:end_frame]
-        gesture_interlocutor = torch.FloatTensor(gesture_interlocutor).transpose(0, 1)
+            gesture_interlocutor = self.motion_interlocutor[idx][start_frame:end_frame]
+            gesture_interlocutor = torch.FloatTensor(gesture_interlocutor).transpose(0, 1)
 
-        x = torch.cat((textaudio, textaudio_interlocutor, gesture_interlocutor), dim=0)
+            non_zero_main = False
+            for idx, txt in enumerate(text):
+                if sum(txt) <= 0:
+                    non_zero_main = True
+                # else:
+                #     print('trn skip')
+                    # print('MAIN')
+            #     if sum(text_interlocutor[idx]) > 0:
+            #         print('ILOC')
+            # print('------')
+            # print(len(text), len(textaudio), len(textaudio_interlocutor))
+            x = torch.cat((textaudio, textaudio_interlocutor, gesture_interlocutor), dim=0)
+            if non_zero_main:
+                # print('moving on')
+                break
+                # print('GESTURE SIZE', gesture_interlocutor)
+            # else:
+            #     return
         return x, length, gesture, gate, length
 
 
@@ -208,7 +235,17 @@ class SpeechGestureDataset_Dyadic_ValSequence(SpeechGestureDataset_Dyadic):
         gesture_interlocutor = self.motion_interlocutor[idx][:total_frame_len]
         gesture_interlocutor = torch.FloatTensor(gesture_interlocutor).transpose(0, 1)
 
-        x = torch.cat((textaudio, textaudio_interlocutor, gesture_interlocutor), dim=0)
+        non_zero_main = False
+        for idx, txt in enumerate(text):
+            if sum(txt) <= 0:
+                non_zero_main = True
+            # else:
+            #     print('val skip')
+        if non_zero_main:
+            x = torch.cat((textaudio, textaudio_interlocutor, gesture_interlocutor), dim=0)
+        else:
+            return 0
+        # x = torch.cat((textaudio, textaudio_interlocutor, gesture_interlocutor), dim=0)
         return x, length, gesture, gate, length
 
 
@@ -230,7 +267,6 @@ class SequentialSampler(torch.utils.data.Sampler):
         return iter(range(self.min_id, self.max_id))
 
 
-
 def prepare_dataloaders(hparams):
     # Get data, data loaders and collate function ready
     print("Loading dataset into memory ...")
@@ -243,6 +279,10 @@ def prepare_dataloaders(hparams):
                     val_h5file_main="../val_main-agent_v0.h5",
                     val_h5file_iloctr="../val_interloctr_v0.h5",
                     motion_dim=hparams.n_acoustic_feat_dims)
+
+    # all_indices = [i for i in range(len(dataset))]
+    # all_indices_val = [i for i in range(len(val_dataset))]
+    # filtered_indices = [i for i in all_indices if custom_condition(dataset[i])]
 
     train_loader = DataLoader(dataset, num_workers=0,
                               sampler=RandomSampler(0, len(dataset)),
@@ -365,6 +405,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
             param_group['lr'] = learning_rate
 
         model.zero_grad()
+
         x, y = model.parse_batch(batch)
         y_pred = model(x, teacher_prob)
 

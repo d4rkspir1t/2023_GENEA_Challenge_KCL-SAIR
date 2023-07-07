@@ -15,9 +15,9 @@ def create_hparams(**kwargs):
         "fp16_run": False,
         "cudnn_enabled": True,
         "cudnn_benchmark": False,
-        "output_directory": "dyadic",  # Directory to save checkpoints.
+        "output_directory": "kcl_dyadic_listeneronly",  # Directory to save checkpoints.
         "log_directory": 'log',
-        "checkpoint_path": '',
+        "checkpoint_path": 'kcl_dyadic_listeneronly/ckpt/checkpoint_30000.pt',
         "warm_start": False,
         "n_gpus": 1,  # Number of GPUs
         "device": 0,
@@ -70,7 +70,7 @@ def create_hparams(**kwargs):
         "learning_rate": 1e-4,
         "weight_decay": 1e-6,
         "grad_clip_thresh": 1.0,
-        "batch_size": 64,
+        "batch_size": 32,
         "mask_padding": True,  # set spk_embedder's padded outputs to padded values
         "mel_weight": 1,
         "gate_weight": 0,

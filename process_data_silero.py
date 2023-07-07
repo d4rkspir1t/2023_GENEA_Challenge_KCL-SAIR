@@ -80,7 +80,8 @@ def load_bvh_jointselector(bvhfile):
 
     mexp_upperbody = Pipeline([
         ('jtsel', JointSelector(["b_root", "b_spine0", "b_spine1", "b_spine2", "b_spine3", "b_neck0", "b_head", "b_r_shoulder",
-                                 "b_r_arm", "b_r_arm_twist",
+                                 "b_r_arm",
+                                 "b_r_arm_twist",
                                  "b_r_forearm",
                                  "b_r_wrist_twist",
                                  "b_r_wrist", "b_l_shoulder",
@@ -177,11 +178,11 @@ def prepare_h5_unclipped(dataroot, h5file, participant, word2vector):
             print("{}/{} {}              ".format(i + 1, len(filenames), filename), end="\r")
             g_data = h5.create_group(str(i))
 
-            # hasfinger, speaker_id = metadict_byfname[filename]
-            # audio, sr = load_audio(os.path.join(wavdir, filename + ".wav"))
-            # prosody = extract_prosodic_features(os.path.join(wavdir, filename + ".wav"))
-            # mfcc = calculate_mfcc(audio, sr)
-            # melspec = calculate_spectrogram(audio, sr)
+            hasfinger, speaker_id = metadict_byfname[filename]
+            audio, sr = load_audio(os.path.join(wavdir, filename + ".wav"))
+            prosody = extract_prosodic_features(os.path.join(wavdir, filename + ".wav"))
+            mfcc = calculate_mfcc(audio, sr)
+            melspec = calculate_spectrogram(audio, sr)
 
             full, upper = load_bvh_jointselector(os.path.join(bvhdir, filename + ".bvh"))
 
@@ -239,104 +240,13 @@ def prepare_h5_unclipped(dataroot, h5file, participant, word2vector):
                         textfeatures[start_frame:end_frame, :300] = vector
                 textfeatures[start_frame:end_frame, -2] = has_laughter
             g_data.create_dataset("text", data=textfeatures, dtype=np.float32)
-    print()
     return
 
-
-def prepare_h5_unclipped_mytest(dataroot, h5file, participant, word2vector):
-    assert participant in ("main-agent", "interloctr"), "`participant` must be either 'main-agent' or 'interloctr'"
-
-    metadata_path = os.path.join(dataroot, "metadata.csv")
-    num_speakers, metadict_byfname, metadict_byindex = load_metadata(metadata_path, participant)
-    filenames = sorted(metadict_byfname.keys())
-
-    wavdir = os.path.join(dataroot, participant, "wav")
-    tsvdir = os.path.join(dataroot, participant, "tsv")
-    if participant == "interloctr":
-        bvhdir = os.path.join(dataroot, participant, "bvh")
-
-    with h5py.File(h5file, "w") as h5:
-        for i, filename in enumerate(filenames):
-            print("{}/{} {}              ".format(i + 1, len(filenames), filename), end="\r")
-            g_data = h5.create_group(str(i))
-
-            hasfinger, speaker_id = metadict_byfname[filename]
-            audio, sr = load_audio(os.path.join(wavdir, filename + ".wav"))
-            prosody = extract_prosodic_features(os.path.join(wavdir, filename + ".wav"))
-            mfcc = calculate_mfcc(audio, sr)
-            melspec = calculate_spectrogram(audio, sr)
-            if participant == "interloctr":
-                full, upper = load_bvh_jointselector(os.path.join(bvhdir, filename + ".bvh"))
-
-            if participant == "interloctr":
-                crop_length = min(mfcc.shape[0], prosody.shape[0], melspec.shape[0], full.shape[0], upper.shape[0])
-            else:
-                crop_length = min(mfcc.shape[0], prosody.shape[0], melspec.shape[0])
-            prosody = prosody[:crop_length]
-            mfcc = mfcc[:crop_length]
-            melspec = melspec[:crop_length]
-            if participant == "interloctr":
-                full = full[:crop_length]
-                upper = upper[:crop_length]
-
-            g_audiodata = g_data.create_group("audio")
-            if participant == "interloctr":
-                g_motiondata = g_data.create_group("motion")
-            g_data.create_dataset("has_finger", data=[hasfinger])
-            g_data.create_dataset("speaker_id", data=[speaker_id])
-
-            # g_audiodata.create_dataset("raw_audio", data=(audio*32768).astype(np.int16), dtype=np.int16)
-            g_audiodata.create_dataset("mfcc", data=mfcc, dtype=np.float32)
-            g_audiodata.create_dataset("melspectrogram", data=melspec, dtype=np.float32)
-            g_audiodata.create_dataset("prosody", data=prosody, dtype=np.float32)
-            if participant == "interloctr":
-                g_motiondata.create_dataset("expmap_full", data=full, dtype=np.float32)
-                g_motiondata.create_dataset("expmap_upper", data=upper, dtype=np.float32)
-
-            # Process the txt
-            # Align txt with audio
-            textfeatures = np.zeros([crop_length, 300 + 2])
-            textfeatures[:, -1] = 1
-            sentence = load_tsv_unclipped(os.path.join(tsvdir, filename + ".tsv"))
-
-            for wi, (start, end, raw_word) in enumerate(sentence):
-                has_laughter = "#" in raw_word
-                start_frame = int(start * 30)
-                end_frame = int(end * 30)
-                textfeatures[start_frame:end_frame, -1] = 0
-
-                word = raw_word.translate(str.maketrans('', '', string.punctuation))
-                word = word.strip()
-                word = word.replace("  ", " ")
-
-                if len(word) > 0:
-                    if word[0] == " ":
-                        word = word[1:]
-
-                if " " in word:
-                    ww = word.split(" ")
-                    subword_duration = (end_frame - start_frame) / len(ww)
-                    for j, w in enumerate(ww):
-                        vector = word2vector.get(w)
-                        if vector is not None:
-                            ss = start_frame + int(subword_duration * j)
-                            ee = start_frame + int(subword_duration * (j + 1))
-                            textfeatures[ss:ee, :300] = vector
-                else:
-                    vector = word2vector.get(word)
-                    if vector is not None:
-                        textfeatures[start_frame:end_frame, :300] = vector
-                textfeatures[start_frame:end_frame, -2] = has_laughter
-            g_data.create_dataset("text", data=textfeatures, dtype=np.float32)
-    print()
-    return
 
 def prepare_h5_unclipped_test(metadata, word2vector, h5file="tst_v0.h5"):
     num_speakers, metadict_byfname, metadict_byindex = load_metadata(metadata)
     filenames = sorted(metadict_byfname.keys())
 
-    # dataroot = os.path.join(args.dataset_path, dataset_type)
-    # wavdir = os.path.join(dataroot, "wav")
     with h5py.File(h5file, "w") as h5:
         for i, filename in enumerate(filenames):
             print("{}/{} {}              ".format(i + 1, len(filenames), filename), end="\r")
@@ -407,27 +317,24 @@ if __name__ == "__main__":
     parser.add_argument("-w", "--word_emb_path", type=str, default="crawl-300d-2M.vec")
     args = parser.parse_args()
 
-    # word2vector = load_wordvectors(fname=args.word_emb_path)
-    word2vector = None
+    word2vector = load_wordvectors(fname=args.word_emb_path)
+
     dataset_type = "trn"
     dataroot = os.path.join(args.dataset_path, dataset_type)
     wavdir = os.path.join(dataroot, "wav")
     tsvdir = os.path.join(dataroot, "tsv")
     bvhdir = os.path.join(dataroot, "bvh")
     
+    # prepare_h5_unclipped(dataroot, f"{dataset_type}_main-agent_tst_v0.h5", "main-agent", word2vector)
+    # prepare_h5_unclipped(dataroot, f"{dataset_type}_interloctr_tst_v0.h5", "interloctr", word2vector)
     prepare_h5_unclipped(dataroot, f"{dataset_type}_main-agent_v0.h5", "main-agent", word2vector)
     prepare_h5_unclipped(dataroot, f"{dataset_type}_interloctr_v0.h5", "interloctr", word2vector)
 
-    # dataset_type = "val"
-    # dataroot = os.path.join(args.dataset_path, dataset_type)
-    # prepare_h5_unclipped(dataroot, f"{dataset_type}_main-agent_v0.h5", "main-agent", word2vector)
-    # prepare_h5_unclipped(dataroot, f"{dataset_type}_interloctr_v0.h5", "interloctr", word2vector)
-
-    dataset_type = "tst"
+    dataset_type = "val"
     dataroot = os.path.join(args.dataset_path, dataset_type)
-    # wavdir = os.path.join(dataroot, "wav")
-    prepare_h5_unclipped_mytest(dataroot, f"{dataset_type}_main-agent_v0.h5", "main-agent", word2vector)
-    prepare_h5_unclipped_mytest(dataroot, f"{dataset_type}_interloctr_v0.h5", "interloctr", word2vector)
+    prepare_h5_unclipped(dataroot, f"{dataset_type}_main-agent_v0.h5", "main-agent", word2vector)
+    prepare_h5_unclipped(dataroot, f"{dataset_type}_interloctr_v0.h5", "interloctr", word2vector)
 
+    # dataset_type = "tst"
+    # dataroot = os.path.join(args.dataset_path, dataset_type)
     # prepare_h5_unclipped_test(dataroot, f"{dataset_type}_interloctr_v0.h5", word2vector, "interloctr")
-    # prepare_h5_unclipped_test(dataroot, f"{dataset_type}_main-agent_v0.h5", word2vector, "main-agent")

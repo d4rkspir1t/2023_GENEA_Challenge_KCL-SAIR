@@ -152,3 +152,7 @@ resource/
 
 GENEA_visualizer-minimal-v1/
 vid/
+
+Tacotron2/kcl_dyadic
+Tacotron2/kcl_dyadic_listeneronly
+Tacotron2/test

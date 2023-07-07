@@ -11,6 +11,7 @@ from common.hparams_monadic import create_hparams
 from torch.utils.data import DataLoader
 from common.loss_function import Tacotron2Loss
 
+torch.cuda.empty_cache()
 
 class SpeechGestureDataset_Monadic(torch.utils.data.Dataset):
     def __init__(self, h5file1, h5file2=None, sequence_length=300, npy_root="..", motion_dim=78):

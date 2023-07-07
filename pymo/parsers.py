@@ -88,7 +88,7 @@ class BVHParser():
         self.data.values = self._to_DataFrame()
         self.data.root_name = self.root_name
         self.data.framerate = self.framerate
-
+        print(self.data.framerate)
         return self.data
     
     def _to_DataFrame(self):

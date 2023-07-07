@@ -18,9 +18,10 @@ from scipy.signal import savgol_filter
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-f', "--h5file", type=str, default="../val_main-agent_v0.h5")
-parser.add_argument('-fi', "--h5file_interlocutor", type=str, default="../val_interloctr_v0.h5")
+parser.add_argument('-f', "--h5file", type=str, default="../tst_main-agent_v0.h5")
+parser.add_argument('-fi', "--h5file_interlocutor", type=str, default="../tst_interloctr_v0.h5")
 parser.add_argument('-ch', "--checkpoint_path", type=str, required=True)
+parser.add_argument('-ch2', "--checkpoint_path_listener", type=str, required=True)
 parser.add_argument('-o', "--output_dir", type=str, default="outputs")
 parser.add_argument('-t', "--track", type=str, default="full", help="The track for the bvh files. Can only be either 'full' or 'upper'")
 args = parser.parse_args()
@@ -34,7 +35,8 @@ torch.backends.cudnn.benchmark = hparams.cudnn_benchmark
 torch.manual_seed(hparams.seed)
 torch.cuda.manual_seed(hparams.seed)
 configname = args.checkpoint_path.split("/")[0]
-args.output_dir = os.path.join(args.output_dir, configname)
+# configname_listen = args.checkpoint_path_listener.split("/")[0]
+args.output_dir = os.path.join(args.output_dir, configname+'_tst')
 os.makedirs(args.output_dir, exist_ok=True)
 
 if args.track == "full":
@@ -48,6 +50,11 @@ model = Tacotron2(hparams)
 if args.checkpoint_path is not None:
 	model.load_state_dict(torch.load(args.checkpoint_path, map_location="cpu")['state_dict'])
 model.cuda().eval()
+
+model_listen = Tacotron2(hparams)
+if args.checkpoint_path_listener is not None:
+	model_listen.load_state_dict(torch.load(args.checkpoint_path_listener, map_location="cpu")['state_dict'])
+model_listen.cuda().eval()
 
 # Load postprocessing pipeline
 npy_root = ".."
@@ -102,8 +109,17 @@ for index in tqdm(range(len(h5.keys()))):
 	x = torch.cat((audiotext, audiotext_interlocutor, motion_interlocutor), dim=1)
 
 	### Inference
+	txt_sum_below = False
+	for idx, txt in enumerate(text):
+		# print('TEXT', sum(txt))
+		if sum(txt) <= 0:
+			txt_sum_below = True
+
 	with torch.no_grad():
-		y_pred = model.inference(x)
+		if txt_sum_below:
+			y_pred = model_listen.inference(x)
+		else:
+			y_pred = model.inference(x)
 		_, predicted_gesture, _, _ = y_pred
 		predicted_gesture = predicted_gesture.squeeze(0).transpose(0, 1).cpu().detach().numpy()
 
@@ -132,7 +148,7 @@ for index in tqdm(range(len(h5.keys()))):
 
 	bvh_data = pipeline.inverse_transform([predicted_gesture])[0]
 	writer = BVHWriter()
-	with open(os.path.join(args.output_dir, "{}-{:03d}.bvh".format(configname, index)), 'w') as f:
+	with open(os.path.join(args.output_dir, "tst_2023_v0_{:03d}_main-agent.bvh".format(index)), 'w') as f:
 		writer.write(bvh_data, f, framerate=30)
 
 h5_interlocutor.close()
