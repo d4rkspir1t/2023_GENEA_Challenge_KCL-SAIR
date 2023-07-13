@@ -108,6 +108,8 @@ class MocapParameterizer(BaseEstimator, TransformerMixin):
             tree_data = {}
 
             for joint in track.traverse():
+                # if joint in track.not_selected:
+                #     continue
                 parent = track.skeleton[joint]['parent']
                 rot_order = track.skeleton[joint]['order']
 
@@ -360,10 +362,13 @@ class JointSelector(BaseEstimator, TransformerMixin):
 
         for track in X:
             t2 = track.clone()
-            
+            t2.not_selected = []
             for key in track.skeleton.keys():
                 if key not in self.selected_joints:
-                    t2.skeleton.pop(key)
+                    # t2.skeleton.pop(key)
+                    pass
+                else:
+                    t2.not_selected.append(key)
             t2.values = track.values[self.selected_channels]
 
             Q.append(t2)
